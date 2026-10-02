@@ -1,0 +1,9 @@
+set system host-name Juniper-Router
+
+set system services ssh
+
+set system services web-management http
+
+set system login user admin authentication encrypted-password "$ABC123"
+
+set system syslog file messages any notice

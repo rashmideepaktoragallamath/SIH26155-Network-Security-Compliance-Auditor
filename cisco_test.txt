@@ -1,0 +1,11 @@
+hostname Router1
+
+ip ssh version 1
+
+ip http server
+
+service password-encryption
+
+logging buffered 4096
+
+enable secret MyPassword123
