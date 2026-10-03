@@ -20,8 +20,21 @@ def _grep(lines, pattern):
     return out
 
 
+# Secrets are masked in stored evidence, so neither the UI, the JSON report nor any AI step ever sees them.
+_SECRET_MASKS = [
+    (re.compile(r"^(enable (?:secret|password)(?: \d)?) \S+", re.I), r"\1 ********"),
+    (re.compile(r"(encrypted-password|plain-text-password)\s+\S+$", re.I), r"\1 ********"),
+]
+
+
+def _mask(text):
+    for pat, repl in _SECRET_MASKS:
+        text = pat.sub(repl, text)
+    return text
+
+
 def _attr(value, hits):
-    return {"value": value, "evidence": [{"line": n, "text": t} for n, t, _ in hits]}
+    return {"value": value, "evidence": [{"line": n, "text": _mask(t)} for n, t, _ in hits]}
 
 
 def _weakest(levels):
@@ -65,7 +78,10 @@ def parse_cisco(text):
     h = _grep(L, r"^ip ssh version (\d)")
     m["ssh_version"] = _attr(int(h[-1][2].group(1)) if h else None, h)
     h = _grep(L, r"^transport input .*\b(telnet|all)\b")
-    m["telnet_enabled"] = _attr(bool(h), h)
+    t = _grep(L, r"^transport input ")
+    # No explicit VTY transport setting: many IOS versions default to allowing Telnet, so it cannot be confirmed.
+    val = True if h else (False if t else "unspecified")
+    m["telnet_enabled"] = _attr(val, h or t)
     h = _grep(L, r"^ip http server$")
     m["http_mgmt_enabled"] = _attr(bool(h), h)
     h = _grep(L, r"^logging (host )?\d+\.\d+\.\d+\.\d+|^logging host \S+")

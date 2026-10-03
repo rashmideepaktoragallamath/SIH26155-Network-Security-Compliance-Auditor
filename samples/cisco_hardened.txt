@@ -1,0 +1,10 @@
+hostname Router2
+ip ssh version 2
+no ip http server
+service password-encryption
+enable secret 9 $9$abcDEFghiJKL
+logging host 10.1.1.5
+ntp server 10.1.1.1
+banner login ^Authorized access only^
+line vty 0 15
+ transport input ssh

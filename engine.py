@@ -12,6 +12,9 @@ RULES = [
          rollback={"Cisco": ["no ip ssh version 2"], "Juniper": ["delete system services ssh protocol-version"]}),
     dict(id="AG-02", name="Telnet management disabled", attr="telnet_enabled", sev="High",
          ok=lambda v: v is False, nist="AC-17, CM-7", certin=None,
+         review=lambda v: v == "unspecified",
+         review_why="No 'transport input' setting found on VTY lines. Many IOS versions allow Telnet by default, "
+                    "so this cannot be confirmed from the config. Verify the device.",
          why="Telnet sends credentials in clear text.",
          fix={"Cisco": ["line vty 0 15", " transport input ssh"], "Juniper": ["delete system services telnet"]},
          rollback={"Cisco": ["line vty 0 15", " transport input all"], "Juniper": ["set system services telnet"]}),
@@ -56,10 +59,12 @@ def evaluate(model, vendor):
     for r in RULES:
         a = model[r["attr"]]
         passed = r["ok"](a["value"])
+        review = (not passed) and r.get("review", lambda v: False)(a["value"])
+        status = "COMPLIANT" if passed else "NEEDS REVIEW" if review else "NON-COMPLIANT"
         results.append(dict(
-            id=r["id"], name=r["name"], status="COMPLIANT" if passed else "NON-COMPLIANT",
+            id=r["id"], name=r["name"], status=status,
             severity=r["sev"], value=a["value"], evidence=a["evidence"],
-            why="Meets control." if passed else r["why"].format(v=a["value"]),
+            why="Meets control." if passed else (r["review_why"] if review else r["why"].format(v=a["value"])),
             nist=r["nist"], certin=r["certin"], cis=VERIFY,
             remediation=[] if passed else r["fix"][vendor],
             rollback=[] if passed else r["rollback"][vendor]))
@@ -67,9 +72,10 @@ def evaluate(model, vendor):
 
 
 def score(results):
-    return max(0, 100 - sum(WEIGHT[x["severity"]] for x in results if x["status"] != "COMPLIANT"))
+    # Only confirmed violations lower the score. NEEDS REVIEW items are shown but never change it.
+    return max(0, 100 - sum(WEIGHT[x["severity"]] for x in results if x["status"] == "NON-COMPLIANT"))
 
 
 def overall_risk(results):
-    bad = {x["severity"] for x in results if x["status"] != "COMPLIANT"}
+    bad = {x["severity"] for x in results if x["status"] == "NON-COMPLIANT"}
     return "HIGH" if "High" in bad else "MEDIUM" if "Medium" in bad else "LOW" if bad else "SECURE"
