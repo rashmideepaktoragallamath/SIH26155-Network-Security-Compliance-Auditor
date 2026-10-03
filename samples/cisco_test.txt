@@ -1,0 +1,8 @@
+hostname Router1
+ip ssh version 1
+ip http server
+! ip http server  (commented)
+service password-encryption
+logging buffered 4096
+enable secret MyPassword123
+snmp-server community public RO
