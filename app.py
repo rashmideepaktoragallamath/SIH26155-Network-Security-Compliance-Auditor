@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import streamlit as st
 from adapters import detect_vendor, PARSERS
 from engine import evaluate, score, overall_risk
@@ -8,13 +9,40 @@ st.title("🛡️ AegisNet AI")
 st.subheader("AI-Driven Multi-Vendor Network Security Compliance Auditor")
 st.caption("Many vendor syntaxes → one Common Security Model → one deterministic, auditable verdict.")
 
-up = st.file_uploader("📁 Upload network configuration", type=["txt", "cfg", "conf"])
+BASE = Path(__file__).parent
+SAMPLES = {
+    "Cisco — weak": "samples/cisco_test.txt",
+    "Cisco — hardened": "samples/cisco_hardened.txt",
+    "Juniper (set) — weak": "samples/juniper_set_test.txt",
+    "Juniper (curly) — partial": "samples/juniper_curly_test.cfg",
+}
+SAMPLES = {k: v for k, v in SAMPLES.items() if (BASE / v).exists()}
 
-if up is None:
-    st.info("Upload a Cisco (IOS) or Juniper (set or curly-brace) configuration to begin.")
+
+def _reset_prev():
+    st.session_state["prev_score"] = None
+
+
+def _load_sample():
+    path = SAMPLES.get(st.session_state.get("sample_choice"))
+    st.session_state["editor"] = (BASE / path).read_text(encoding="utf-8", errors="ignore") if path else ""
+    st.session_state["prev_score"] = None
+
+
+mode = st.radio("Input", ["Upload file", "Paste / edit config"], horizontal=True, on_change=_reset_prev)
+if mode == "Upload file":
+    up = st.file_uploader("📁 Upload network configuration", type=["txt", "cfg", "conf"])
+    text = up.read().decode("utf-8", errors="ignore") if up is not None else ""
+else:
+    st.session_state.setdefault("editor", "")
+    st.selectbox("Load a sample (optional)", ["(blank)"] + list(SAMPLES), key="sample_choice", on_change=_load_sample)
+    text = st.text_area("Configuration. Edit it, then press Ctrl+Enter (or click outside the box) to re-audit.",
+                        key="editor", height=280)
+    st.caption("On the hosted demo, use sample or sanitised configs only.")
+
+if not text.strip():
+    st.info("Upload or paste a Cisco (IOS) or Juniper (set or curly-brace) configuration to begin.")
     st.stop()
-
-text = up.read().decode("utf-8", errors="ignore")
 vendor, conf = detect_vendor(text)
 if vendor == "Unknown":
     st.error("Vendor not recognised. Audit stopped (no guessing).")
@@ -28,8 +56,14 @@ review = [r for r in results if r["status"] == "NEEDS REVIEW"]
 good = [r for r in results if r["status"] == "COMPLIANT"]
 
 st.markdown("---")
+delta = None
+if mode == "Paste / edit config":
+    prev = st.session_state.get("prev_score")
+    if prev is not None and prev != sc:
+        delta = sc - prev
+    st.session_state["prev_score"] = sc
 c = st.columns(6)
-c[0].metric("Security Score", f"{sc}/100")
+c[0].metric("Security Score", f"{sc}/100", delta=delta)
 c[1].metric("Compliant", len(good))
 c[2].metric("Non-Compliant", len(bad))
 c[3].metric("Needs Review", len(review))
@@ -80,7 +114,7 @@ for r in good:
         st.write(f"**NIST SP 800-53:** {r['nist']}")
 
 if bad:
-    fix ="\n".join(f"! {r['id']} {r['name']}\n" + "\n".join(r["remediation"]) for r in bad)
+    fix = "\n".join(f"! {r['id']} {r['name']}\n" + "\n".join(r["remediation"]) for r in bad)
     st.subheader("🔧 Remediation (review before applying)")
     st.code(fix, language="text")
     st.download_button("⬇️ Download remediation", fix, "aegisnet_remediation.txt")
