@@ -1,86 +1,103 @@
-# SIH26155 - Network Security Compliance Auditor
+# AegisNet AI
 
-A deterministic, vendor-neutral audit tool for network device security baselines. It inspects Cisco and Juniper configuration files, maps the relevant settings into a common security model, evaluates them against security controls, and produces a risk score with remediation guidance.
+**Unified Multi-Vendor Network Security Compliance Auditor**
+Smart India Hackathon 2026 · Problem Statement SIH26155 · Team Ansarash (Team ID 168312)
 
-The project is implemented as a Streamlit web app and is designed to help security reviewers validate configuration posture quickly and consistently.
+> Many vendor syntaxes. One security model. One auditable verdict.
 
-## Overview
+**Live prototype:** https://sih26155-network-security-compliance-auditor-aazm9cpldnyz8h97y.streamlit.app/
 
-Network devices often use different configuration syntaxes across vendors. This project normalizes those differences into a single internal model and checks whether key security controls are implemented correctly.
+---
 
-It analyzes:
-- Cisco IOS-style configurations
-- Juniper Junos `set` syntax
-- Juniper Junos curly-brace syntax
+## The problem
 
-It then reports:
-- Security score out of 100
-- Non-compliant controls
-- Controls needing manual review
-- Compliant controls
-- Vendor-specific remediation commands
-- Rollback suggestions
-- JSON export of the full audit report
+Network devices from different vendors describe the same security settings in completely different configuration languages. Auditing a mixed network means learning several syntaxes and checking each device by hand, which is slow, inconsistent and error-prone.
 
-## Features
+## What AegisNet AI does
 
-- Automatic vendor detection
-- Multi-vendor parsing for common network security settings
-- Common Security Model (CSM) mapping
-- Deterministic compliance assessment
-- Security scoring and overall risk classification
-- Evidence-based findings with matching config lines
-- Recommended remediation steps
-- Downloadable JSON report
-- Sample configurations for testing
+1. Accepts a device configuration (upload a file, or paste and edit it in the browser).
+2. Detects the vendor and parses it with a vendor-specific adapter (comments are ignored).
+3. Converts it into one vendor-neutral **Common Security Model**. Every attribute keeps the exact line number and text it came from.
+4. Evaluates the model with a **deterministic rule engine** (no AI in the verdict).
+5. Reports findings with evidence, severity, framework references, and a vendor-specific **fix and rollback**.
 
-## Supported Controls
+## Status
 
-The auditor checks core hardening requirements such as:
+| | Feature |
+|---|---|
+| ✅ Implemented | Cisco IOS and Juniper Junos adapters (Junos in both `set` and curly-brace format) |
+| ✅ Implemented | Common Security Model with line-level evidence |
+| ✅ Implemented | 8 deterministic controls and a severity-weighted score |
+| ✅ Implemented | NIST SP 800-53 references; CERT-In Directions (28 April 2022) references for NTP (item i) and log retention (item iv) |
+| ✅ Implemented | Vendor-specific fix and rollback commands, remediation script and JSON report download |
+| ✅ Implemented | Secrets (passwords) masked in the UI and in reports |
+| ✅ Implemented | "Needs Review" state when a config cannot prove a setting (not scored) |
+| ✅ Implemented | Live re-audit: edit the config and the score updates |
+| ✅ Implemented | Unrecognised vendor stops the audit instead of guessing |
+| 🔜 Planned | Fortinet FortiOS and Palo Alto PAN-OS adapters |
+| 🔜 Planned | AI-assisted interpretation of unfamiliar syntax, with a confidence score and human review (AI never makes the compliance decision) |
+| 🔜 Planned | Firewall rule-base analysis (any-any, shadowed, redundant rules) |
+| 🔜 Planned | CIS Benchmark, NCIIPC and RBI mappings |
+| 🔜 Planned | Configuration drift tracking, fleet-wide score, PDF and SARIF reports |
 
-- SSH version 2 enforcement
-- Telnet management disabled
-- HTTP management disabled
-- Remote syslog enabled
-- Strong privileged password protection
-- No default SNMP community strings
-- NTP configuration
-- Login banner presence
+## Controls
 
-## How It Works
+| ID | Control | Severity | NIST SP 800-53 |
+|---|---|---|---|
+| AG-01 | SSH version 2 enforced | High | AC-17 |
+| AG-02 | Telnet management disabled | High | AC-17, CM-7 |
+| AG-03 | HTTP management disabled | Medium | CM-7 |
+| AG-04 | Remote syslog configured | Medium | AU-2 (CERT-In item iv) |
+| AG-05 | Strong privileged password hashing | High | IA-5 |
+| AG-06 | No default SNMP community | High | IA-5 |
+| AG-07 | NTP time synchronisation | Low | AU-8 (CERT-In item i) |
+| AG-08 | Login banner present | Low | AC-8 |
 
-1. The user uploads a configuration file or pastes a config into the web app.
-2. The system identifies the vendor.
-3. A parser converts the device-specific syntax into a common security model.
-4. A rules engine checks each control against expected values.
-5. The result is scored and displayed with evidence and remediation commands.
+**Scoring:** start at 100 and subtract 20 for each confirmed High finding, 10 for Medium and 5 for Low. Items marked *Needs Review* are shown but never change the score.
 
-This is a rule-based compliance engine, not a black-box AI decision maker. The logic is explicit, explainable, and auditable.
+## Try it
 
-## Project Structure
+Open the live link, choose **Paste / edit config**, and load a sample:
 
-- app.py - Streamlit web interface
-- adapters.py - Vendor detection and config parsing
-- engine.py - Compliance rules, scoring, and risk evaluation
-- samples/ - Example Cisco and Juniper configurations
-- requirements.txt - Python dependencies
+| Sample | Expected score |
+|---|---|
+| Cisco, weak (`samples/cisco_test.txt`) | 10/100 |
+| Cisco, after changing `ip ssh version 1` to `2` | 30/100 (+20) |
+| Cisco, hardened (`samples/cisco_hardened.txt`) | 100/100 |
+| Juniper, set format (`samples/juniper_set_test.txt`) | 30/100 |
+| Juniper, curly-brace (`samples/juniper_curly_test.cfg`) | 75/100 |
+| Unrecognised file (`samples/unknown.txt`) | Audit stops with an error |
 
-## Tech Stack
+The passwords in the sample files are fake test values.
 
-- Python 3
-- Streamlit
-- Regex-based parsing
-- Deterministic rule engine
-
-## Prerequisites
-
-- Python 3.9+
-- pip
-- Virtual environment recommended
-
-## Installation
+## Run locally
 
 ```bash
-git clone https://github.com/your-username/SIH26155-Network-Security-Compliance-Auditor.git
-cd SIH26155-Network-Security-Compliance-Auditor
-python -m venv .venv
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## Project structure
+
+```
+app.py          Streamlit user interface
+adapters.py     Vendor detection and adapters -> Common Security Model
+engine.py       Deterministic rules, scoring and remediation
+samples/        Test configurations
+```
+
+Adding a vendor means writing one parser function in `adapters.py` and registering it in `PARSERS`.
+
+## Design principle
+
+**AI interprets. Deterministic rules decide.** Compliance verdicts are always produced by the rule engine, so results are consistent, explainable and auditable.
+
+## Notes and limits
+
+- Configurations are analysed offline; the tool does not connect to devices.
+- Framework mappings show indicative alignment and are **not** a formal certification.
+- Review all generated remediation commands before applying them to a production device.
+
+## References
+
+NIST SP 800-53 Rev. 5 · CERT-In Directions of 28 April 2022 (Section 70B(6), IT Act 2000) · Cisco IOS and Juniper Junos documentation. Planned: CIS Benchmarks, NCIIPC guidelines, RBI Cyber Security Framework.
