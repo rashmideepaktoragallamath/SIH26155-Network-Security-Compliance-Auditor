@@ -21,6 +21,20 @@ Network devices from different vendors describe the same security settings in co
 4. Evaluates the model with a **deterministic rule engine** (no AI in the verdict).
 5. Reports findings with evidence, severity, framework references, and a vendor-specific **fix and rollback**.
 
+## Screenshots
+
+### Cisco audit overview
+
+![Cisco audit overview showing the security score, detected vendor, and evidence in the Common Security Model](screenshots/cisco-audit-overview.png)
+
+### Juniper configuration in the Common Security Model
+
+![Juniper configuration normalized into the vendor-neutral Common Security Model](screenshots/juniper-common-security-model.png)
+
+### Finding with remediation and rollback
+
+![Remote syslog finding with explanation, compliance references, remediation, and rollback guidance](screenshots/remote-syslog-finding.png)
+
 ## Status
 
 | | Feature |
