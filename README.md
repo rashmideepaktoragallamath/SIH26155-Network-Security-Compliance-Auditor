@@ -7,6 +7,8 @@ Smart India Hackathon 2026 · Problem Statement SIH26155 · Team Ansarash (Team 
 
 **Live prototype:** https://sih26155-network-security-compliance-auditor-aazm9cpldnyz8h97y.streamlit.app/
 
+**Presentation (latest version):** [docs/AegisNet_SIH26155_idea_template.pdf](docs/AegisNet_SIH26155_idea_template.pdf)
+
 ---
 
 ## The problem
@@ -86,6 +88,7 @@ app.py          Streamlit user interface
 adapters.py     Vendor detection and adapters -> Common Security Model
 engine.py       Deterministic rules, scoring and remediation
 samples/        Test configurations
+docs/           Presentation (PDF and editable PPTX)
 ```
 
 Adding a vendor means writing one parser function in `adapters.py` and registering it in `PARSERS`.
