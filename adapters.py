@@ -24,6 +24,7 @@ def _grep(lines, pattern):
 _SECRET_MASKS = [
     (re.compile(r"^(enable (?:secret|password)(?: \d)?) \S+", re.I), r"\1 ********"),
     (re.compile(r"(encrypted-password|plain-text-password)\s+\S+$", re.I), r"\1 ********"),
+    (re.compile(r"^(set password ENC)\s+\S+", re.I), r"\1 ********"),
 ]
 
 
@@ -62,14 +63,16 @@ def junos_to_set(text):
 
 def detect_vendor(text):
     raw = _lines(text)
-    cisco = len(_grep(raw, r"^(hostname |ip ssh |ip http |service password-encryption|enable secret|line vty|interface [a-z]+)"))
-    junos = len(_grep(raw, r"^set (system|interfaces|security|snmp) ")) + \
-        len(_grep(raw, r"^(system|interfaces|security|snmp)\s*\{"))
-    if cisco > junos:
-        return "Cisco", cisco
-    if junos > cisco:
-        return "Juniper", junos
-    return "Unknown", 0
+    score = {
+        "Cisco": len(_grep(raw, r"^(hostname |ip ssh |ip http |service password-encryption|enable secret|line vty|interface [a-z]+)")),
+        "Juniper": len(_grep(raw, r"^set (system|interfaces|security|snmp) ")) +
+                   len(_grep(raw, r"^(system|interfaces|security|snmp)\s*\{")),
+        "Fortinet": len(_grep(raw, r"^config (system|firewall|log|router|user|vpn|wireless) ")),
+    }
+    top = sorted(score.items(), key=lambda kv: -kv[1])
+    if top[0][1] == 0 or top[0][1] == top[1][1]:
+        return "Unknown", 0
+    return top[0]
 
 
 def parse_cisco(text):
@@ -130,4 +133,58 @@ def parse_juniper(text):
     return m
 
 
-PARSERS = {"Cisco": parse_cisco, "Juniper": parse_juniper}  # add a vendor = add one function here
+def forti_flat(text):
+    """FortiOS 'config / edit / set' tree -> (line, section_path, text). Keeps line numbers."""
+    out, stack = [], []
+    for n, l in _lines(text):
+        if l.startswith("#"):
+            continue
+        if l.startswith("config "):
+            stack.append(l[7:].strip())
+        elif l.startswith("edit "):
+            stack.append("edit " + l[5:].strip().strip('"'))
+        elif l in ("next", "end"):
+            if stack:
+                stack.pop()
+        elif l.startswith("set "):
+            out.append((n, " / ".join(stack), l))
+    return out
+
+
+def parse_fortinet(text):
+    F = forti_flat(text)
+    m = {}
+
+    def sec(prefix):
+        return [(n, t) for n, p, t in F if p.startswith(prefix)]
+
+    # Management access is set per interface: 'set allowaccess ping https ssh http telnet'
+    acc = _grep(sec("system interface"), r"^set allowaccess (.*)")
+    words = [(n, t, set(x.group(1).lower().replace('"', "").split())) for n, t, x in acc]
+    legacy = _grep(sec("system global"), r"^set admin-telnet enable")
+    ssh = [(n, t, None) for n, t, w in words if "ssh" in w]
+    # FortiOS offers SSH v2 only, so SSH enabled on any interface is treated as v2 (check your FortiOS version).
+    m["ssh_version"] = _attr(2 if ssh else None, ssh)
+    tel = [(n, t, None) for n, t, w in words if "telnet" in w] + legacy
+    m["telnet_enabled"] = _attr(bool(tel), tel)
+    http = [(n, t, None) for n, t, w in words if "http" in w]
+    m["http_mgmt_enabled"] = _attr(bool(http), http)
+    st = _grep(sec("log syslogd setting"), r"^set status enable")
+    sv = _grep(sec("log syslogd setting"), r"^set server ")
+    m["remote_logging"] = _attr(bool(st and sv), st + sv)
+    h = _grep(sec("system admin"), r"^set password ENC (\S+)")
+    lv = ["strong" if x.group(1).startswith("SH2") else "weak-hash" if x.group(1).startswith(("AK1", "SH1")) else "unknown"
+          for _, _, x in h]
+    plain = _grep(sec("system admin"), r"^set password (?!ENC)\S+")
+    lv += ["plaintext"] * len(plain)
+    m["privileged_password"] = _attr(_weakest(lv), h + plain)
+    h = _grep(sec("system snmp community"), r'^set name "?(public|private)"?$')
+    m["snmp_default_community"] = _attr(bool(h), h)
+    h = _grep(sec("system ntp"), r"^set (server|ntpsync enable)")
+    m["ntp_configured"] = _attr(bool(h), h)
+    h = _grep(sec("system global"), r"^set pre-login-banner enable")
+    m["login_banner"] = _attr(bool(h), h)
+    return m
+
+
+PARSERS = {"Cisco": parse_cisco, "Juniper": parse_juniper, "Fortinet": parse_fortinet}  # add a vendor = add one function here

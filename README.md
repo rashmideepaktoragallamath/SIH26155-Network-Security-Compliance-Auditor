@@ -25,7 +25,7 @@ Network devices from different vendors describe the same security settings in co
 
 | | Feature |
 |---|---|
-| ✅ Implemented | Cisco IOS and Juniper Junos adapters (Junos in both `set` and curly-brace format) |
+| ✅ Implemented | Cisco IOS, Juniper Junos (`set` and curly-brace) and Fortinet FortiOS adapters |
 | ✅ Implemented | Common Security Model with line-level evidence |
 | ✅ Implemented | 8 deterministic controls and a severity-weighted score |
 | ✅ Implemented | NIST SP 800-53 references; CERT-In Directions (28 April 2022) references for NTP (item i) and log retention (item iv) |
@@ -34,7 +34,7 @@ Network devices from different vendors describe the same security settings in co
 | ✅ Implemented | "Needs Review" state when a config cannot prove a setting (not scored) |
 | ✅ Implemented | Live re-audit: edit the config and the score updates |
 | ✅ Implemented | Unrecognised vendor stops the audit instead of guessing |
-| 🔜 Planned | Fortinet FortiOS and Palo Alto PAN-OS adapters |
+| 🔜 Planned | Palo Alto PAN-OS adapter |
 | 🔜 Planned | AI-assisted interpretation of unfamiliar syntax, with a confidence score and human review (AI never makes the compliance decision) |
 | 🔜 Planned | Firewall rule-base analysis (any-any, shadowed, redundant rules) |
 | 🔜 Planned | CIS Benchmark, NCIIPC and RBI mappings |
@@ -66,6 +66,8 @@ Open the live link, choose **Paste / edit config**, and load a sample:
 | Cisco, hardened (`samples/cisco_hardened.txt`) | 100/100 |
 | Juniper, set format (`samples/juniper_set_test.txt`) | 30/100 |
 | Juniper, curly-brace (`samples/juniper_curly_test.cfg`) | 75/100 |
+| Fortinet, weak (`samples/fortinet_weak.conf`) | 10/100 |
+| Fortinet, hardened (`samples/fortinet_hardened.conf`) | 100/100 |
 | Unrecognised file (`samples/unknown.txt`) | Audit stops with an error |
 
 The passwords in the sample files are fake test values.
@@ -94,6 +96,7 @@ Adding a vendor means writing one parser function in `adapters.py` and registeri
 
 ## Notes and limits
 
+- FortiOS accepts SSH v2 only, so SSH enabled on an interface is treated as v2 (confirm for your FortiOS version).
 - Configurations are analysed offline; the tool does not connect to devices.
 - Framework mappings show indicative alignment and are **not** a formal certification.
 - Review all generated remediation commands before applying them to a production device.

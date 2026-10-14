@@ -15,6 +15,8 @@ SAMPLES = {
     "Cisco — hardened": "samples/cisco_hardened.txt",
     "Juniper (set) — weak": "samples/juniper_set_test.txt",
     "Juniper (curly) — partial": "samples/juniper_curly_test.cfg",
+    "Fortinet — weak": "samples/fortinet_weak.conf",
+    "Fortinet — hardened": "samples/fortinet_hardened.conf",
 }
 SAMPLES = {k: v for k, v in SAMPLES.items() if (BASE / v).exists()}
 
@@ -41,7 +43,7 @@ else:
     st.caption("On the hosted demo, use sample or sanitised configs only.")
 
 if not text.strip():
-    st.info("Upload or paste a Cisco (IOS) or Juniper (set or curly-brace) configuration to begin.")
+    st.info("Upload or paste a Cisco (IOS), Juniper (set or curly-brace) or Fortinet (FortiOS) configuration to begin.")
     st.stop()
 vendor, conf = detect_vendor(text)
 if vendor == "Unknown":
@@ -114,7 +116,7 @@ for r in good:
         st.write(f"**NIST SP 800-53:** {r['nist']}")
 
 if bad:
-    fix = "\n".join(f"! {r['id']} {r['name']}\n" + "\n".join(r["remediation"]) for r in bad)
+    fix ="\n".join(f"! {r['id']} {r['name']}\n" + "\n".join(r["remediation"]) for r in bad)
     st.subheader("🔧 Remediation (review before applying)")
     st.code(fix, language="text")
     st.download_button("⬇️ Download remediation", fix, "aegisnet_remediation.txt")
