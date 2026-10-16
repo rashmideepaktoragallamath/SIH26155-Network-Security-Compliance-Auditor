@@ -3,6 +3,7 @@ from pathlib import Path
 import streamlit as st
 from adapters import detect_vendor, PARSERS
 from engine import evaluate, score, overall_risk
+from fleet import audit_fleet
 
 st.set_page_config(page_title="AegisNet AI", page_icon="🛡️", layout="wide")
 st.title("🛡️ AegisNet AI")
@@ -31,7 +32,47 @@ def _load_sample():
     st.session_state["prev_score"] = None
 
 
-mode = st.radio("Input", ["Upload file", "Paste / edit config"], horizontal=True, on_change=_reset_prev)
+FLEET = "Fleet audit (multiple files)"
+mode = st.radio("Input", ["Upload file", "Paste / edit config", FLEET], horizontal=True, on_change=_reset_prev)
+
+
+def run_fleet():
+    st.caption("Upload several device configs (any mix of Cisco, Juniper, Fortinet) or load the built-in demo fleet.")
+    files = st.file_uploader("📁 Upload configs", type=["txt", "cfg", "conf"], accept_multiple_files=True, key="fleet_files")
+    demo = st.checkbox("Use the demo fleet (all sample configs)")
+    items = [(f.name, f.read().decode("utf-8", errors="ignore")) for f in files]
+    if demo:
+        items += [(Path(p).name, (BASE / p).read_text(encoding="utf-8", errors="ignore")) for p in SAMPLES.values()]
+        unk = BASE / "samples/unknown.txt"
+        if unk.exists():
+            items.append((unk.name, unk.read_text(encoding="utf-8", errors="ignore")))
+    if not items:
+        st.info("Upload two or more configs, or tick the demo fleet, to see a fleet-wide score.")
+        return
+    rows, summ = audit_fleet(items)
+    c = st.columns(4)
+    c[0].metric("Devices audited", f"{summ['devices_audited']}/{summ['devices_total']}")
+    c[1].metric("Fleet average score", "-" if summ["average_score"] is None else f"{summ['average_score']}/100")
+    c[2].metric("Worst device", summ["worst_device"] or "-")
+    c[3].metric("Vendors", ", ".join(f"{k} {v}" for k, v in summ["by_vendor"].items()) or "-")
+    st.subheader("🏢 Fleet scoreboard (lowest score first)")
+    st.dataframe([{"device": r["device"], "vendor": r["vendor"], "result": r["status"] if r["status"] != "Audited" else "Audited",
+                   "score": r.get("score"), "risk": r.get("risk"), "non-compliant": r.get("non_compliant"),
+                   "high": r.get("high"), "needs review": r.get("needs_review"), "failed controls": r.get("failed_controls")}
+                  for r in rows], use_container_width=True)
+    if summ["top_failing_controls"]:
+        st.subheader("🔁 Most common failures across the fleet")
+        st.dataframe([{"control": k, "devices failing": v} for k, v in summ["top_failing_controls"]], use_container_width=True)
+    st.download_button("📥 Download fleet JSON report",
+                       json.dumps({"summary": summ, "devices": [{k: v for k, v in r.items()} for r in rows]},
+                                  indent=2, default=str), "aegisnet_fleet_report.json", "application/json")
+    st.caption("To see evidence and fixes for one device, switch to Paste / edit config and load it.")
+
+
+if mode == FLEET:
+    run_fleet()
+    st.stop()
+
 if mode == "Upload file":
     up = st.file_uploader("📁 Upload network configuration", type=["txt", "cfg", "conf"])
     text = up.read().decode("utf-8", errors="ignore") if up is not None else ""
