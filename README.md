@@ -35,12 +35,13 @@ Network devices from different vendors describe the same security settings in co
 | ✅ Implemented | Secrets (passwords) masked in the UI and in reports |
 | ✅ Implemented | "Needs Review" state when a config cannot prove a setting (not scored) |
 | ✅ Implemented | Live re-audit: edit the config and the score updates |
+| ✅ Implemented | Fleet audit: upload several configs (mixed vendors) for one scoreboard, fleet average and most common failures |
 | ✅ Implemented | Unrecognised vendor stops the audit instead of guessing |
 | 🔜 Planned | Palo Alto PAN-OS adapter |
 | 🔜 Planned | AI-assisted interpretation of unfamiliar syntax, with a confidence score and human review (AI never makes the compliance decision) |
 | 🔜 Planned | Firewall rule-base analysis (any-any, shadowed, redundant rules) |
 | 🔜 Planned | CIS Benchmark, NCIIPC and RBI mappings |
-| 🔜 Planned | Configuration drift tracking, fleet-wide score, PDF and SARIF reports |
+| 🔜 Planned | Configuration drift tracking over time, PDF and SARIF reports |
 
 ## Controls
 
@@ -59,7 +60,9 @@ Network devices from different vendors describe the same security settings in co
 
 ## Try it
 
-Open the live link, choose **Paste / edit config**, and load a sample:
+Open the live link. For one device choose **Paste / edit config** and load a sample. For many devices choose **Fleet audit** and tick *Use the demo fleet* (expected: 6 devices audited, average score 54.2, worst device `cisco_test.txt`, `unknown.txt` reported as not recognised).
+
+Single-device samples:
 
 | Sample | Expected score |
 |---|---|
@@ -86,6 +89,7 @@ streamlit run app.py
 ```
 app.py          Streamlit user interface
 adapters.py     Vendor detection and adapters -> Common Security Model
+fleet.py        Fleet audit across many configs
 engine.py       Deterministic rules, scoring and remediation
 samples/        Test configurations
 docs/           Presentation (PDF and editable PPTX)
