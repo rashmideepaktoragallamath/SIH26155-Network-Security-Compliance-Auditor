@@ -4,6 +4,8 @@ import streamlit as st
 from adapters import detect_vendor, PARSERS
 from engine import evaluate, score, overall_risk
 from fleet import audit_fleet
+import hashlib
+import ai
 
 st.set_page_config(page_title="AegisNet AI", page_icon="🛡️", layout="wide")
 st.title("🛡️ AegisNet AI")
@@ -18,6 +20,7 @@ SAMPLES = {
     "Juniper (curly) — partial": "samples/juniper_curly_test.cfg",
     "Fortinet — weak": "samples/fortinet_weak.conf",
     "Fortinet — hardened": "samples/fortinet_hardened.conf",
+    "Palo Alto (AI demo, no adapter)": "samples/paloalto_demo.conf",
 }
 SAMPLES = {k: v for k, v in SAMPLES.items() if (BASE / v).exists()}
 
@@ -84,15 +87,37 @@ else:
     st.caption("On the hosted demo, use sample or sanitised configs only.")
 
 if not text.strip():
-    st.info("Upload or paste a Cisco (IOS), Juniper (set or curly-brace) or Fortinet (FortiOS) configuration to begin.")
+    st.info("Upload or paste a Cisco (IOS), Juniper (set or curly-brace) or Fortinet (FortiOS) configuration to begin. Other vendors can be tried with the AI interpretation.")
     st.stop()
 vendor, conf = detect_vendor(text)
+KEY = ai.get_key(st)
+text_id = hashlib.sha256(text.encode()).hexdigest()[:16]
+ai_mode, ai_info = False, None
 if vendor == "Unknown":
-    st.error("Vendor not recognised. Audit stopped (no guessing).")
-    st.stop()
-
-model = PARSERS[vendor](text)
+    st.error("Vendor not recognised by the built-in adapters. The rule-based audit stopped (no guessing).")
+    if not KEY:
+        st.info("Optional: add GEMINI_API_KEY in Streamlit Secrets to let the AI try to interpret an unfamiliar vendor.")
+        st.stop()
+    cache = st.session_state.setdefault("ai_interp", {})
+    if st.button("🤖 Try AI interpretation (experimental)"):
+        with st.spinner("AI is mapping the config onto the common security model..."):
+            m, i, err = ai.interpret(KEY, text)
+        if err:
+            st.error(f"AI unavailable: {err}")
+            st.stop()
+        cache[text_id] = (m, i)
+    if text_id not in cache:
+        st.stop()
+    model, ai_info = cache[text_id]
+    vendor, ai_mode = "AI-inferred", True
+else:
+    model = PARSERS[vendor](text)
 results = evaluate(model, vendor)
+if ai_mode:
+    results = ai.apply_review(results, ai_info)
+    st.warning("🤖 AI-inferred result. Every setting below was checked against a real line in your config; anything the AI "
+               "could not prove, or was unsure about, is under Needs Review and is not scored. The score is indicative only. "
+               "The rule engine, not the AI, decides compliance.")
 sc, risk = score(results), overall_risk(results)
 bad = [r for r in results if r["status"] == "NON-COMPLIANT"]
 review = [r for r in results if r["status"] == "NEEDS REVIEW"]
@@ -155,6 +180,22 @@ for r in good:
         st.write("**Evidence:** " + ("; ".join(f"line {e['line']}: `{e['text']}`" for e in r["evidence"])
                                       or "no matching line (setting absent)"))
         st.write(f"**NIST SP 800-53:** {r['nist']}")
+
+if KEY:
+    st.subheader("🤖 AI explanation")
+    ex = st.session_state.setdefault("ai_explain", {})
+    if st.button("Explain these findings with AI"):
+        with st.spinner("AI is writing the explanation..."):
+            txt, err = ai.explain(KEY, vendor, sc, risk, results)
+        if err:
+            st.error(f"AI unavailable: {err}")
+        else:
+            ex[text_id] = txt
+    if text_id in ex:
+        st.info(ex[text_id])
+        st.caption("AI wrote this explanation from the audit results only. It cannot change any score or verdict.")
+else:
+    st.caption("🤖 AI explanation is available when GEMINI_API_KEY is set in Streamlit Secrets.")
 
 if bad:
     fix ="\n".join(f"! {r['id']} {r['name']}\n" + "\n".join(r["remediation"]) for r in bad)
