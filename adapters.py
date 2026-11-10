@@ -25,6 +25,7 @@ _SECRET_MASKS = [
     (re.compile(r"^(enable (?:secret|password)(?: \d)?) \S+", re.I), r"\1 ********"),
     (re.compile(r"(encrypted-password|plain-text-password)\s+\S+$", re.I), r"\1 ********"),
     (re.compile(r"^(set password ENC)\s+\S+", re.I), r"\1 ********"),
+    (re.compile(r"\b(phash)\s+\S+", re.I), r"\1 ********"),
 ]
 
 

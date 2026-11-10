@@ -66,8 +66,8 @@ def evaluate(model, vendor):
             severity=r["sev"], value=a["value"], evidence=a["evidence"],
             why="Meets control." if passed else (r["review_why"] if review else r["why"].format(v=a["value"])),
             nist=r["nist"], certin=r["certin"], cis=VERIFY,
-            remediation=[] if passed else r["fix"][vendor],
-            rollback=[] if passed else r["rollback"][vendor]))
+            remediation=[] if passed else r["fix"].get(vendor, ["(no built-in fix for this vendor; review manually)"]),
+            rollback=[] if passed else r["rollback"].get(vendor, ["(restore previous setting manually)"])))
     return results
 
 

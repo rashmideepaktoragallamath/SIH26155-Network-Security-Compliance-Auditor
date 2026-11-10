@@ -38,7 +38,7 @@ Network devices from different vendors describe the same security settings in co
 | ✅ Implemented | Fleet audit: upload several configs (mixed vendors) for one scoreboard, fleet average and most common failures |
 | ✅ Implemented | Unrecognised vendor stops the audit instead of guessing |
 | 🔜 Planned | Palo Alto PAN-OS adapter |
-| 🔜 Planned | AI-assisted interpretation of unfamiliar syntax, with a confidence score and human review (AI never makes the compliance decision) |
+| ✅ Implemented (optional, needs `GEMINI_API_KEY`) | AI explanation of findings, and AI interpretation of an unfamiliar vendor's syntax. Secrets are redacted first, every AI answer is checked against a real config line, low-confidence items go to Needs Review, and the AI never decides compliance |
 | 🔜 Planned | Firewall rule-base analysis (any-any, shadowed, redundant rules) |
 | 🔜 Planned | CIS Benchmark, NCIIPC and RBI mappings |
 | 🔜 Planned | Configuration drift tracking over time, PDF and SARIF reports |
@@ -90,6 +90,7 @@ streamlit run app.py
 app.py          Streamlit user interface
 adapters.py     Vendor detection and adapters -> Common Security Model
 fleet.py        Fleet audit across many configs
+ai.py           Optional Gemini layer: explanation and unfamiliar-syntax interpretation
 engine.py       Deterministic rules, scoring and remediation
 samples/        Test configurations
 docs/           Presentation (PDF and editable PPTX)
@@ -100,6 +101,10 @@ Adding a vendor means writing one parser function in `adapters.py` and registeri
 ## Design principle
 
 **AI interprets. Deterministic rules decide.** Compliance verdicts are always produced by the rule engine, so results are consistent, explainable and auditable.
+
+## AI layer (optional)
+
+Set `GEMINI_API_KEY` in Streamlit Secrets (or `.streamlit/secrets.toml` locally, which is git-ignored). Without a key the app runs normally and the AI buttons are simply unavailable. Send only sample or sanitised configs to the AI. Try it with `samples/paloalto_demo.conf` (a vendor with no built-in adapter).
 
 ## Notes and limits
 
