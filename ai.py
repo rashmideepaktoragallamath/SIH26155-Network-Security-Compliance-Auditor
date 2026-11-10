@@ -5,7 +5,7 @@ Guardrails (match the deck):
   2. Every AI answer about a config line is verified against the real line; unverifiable answers are discarded.
   3. Low-confidence or unverified items become NEEDS REVIEW and never change the score.
   4. If there is no key, or the API fails, the app still works; only the AI buttons are unavailable.
-The key is read from Streamlit Secrets (GEMINI_API_KEY). It is never stored in the code or the repo.
+Keys are read from Streamlit Secrets: GROQ_API_KEY (preferred if present) or GEMINI_API_KEY. Never stored in code or the repo.
 """
 import json
 import re
@@ -16,6 +16,9 @@ from engine import RULES
 
 MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]  # tried in order
 API = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+GROQ_API = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+UA = "AegisNet-AI/1.0"
 MIN_CONF = 0.7
 
 ATTR_HELP = {
@@ -47,34 +50,48 @@ def redact(line):
 
 
 def get_key(st):
-    try:
-        k = st.secrets.get("GEMINI_API_KEY", "")
-    except Exception:
-        k = ""
-    return k or None
+    """Return 'groq:<key>' or 'gemini:<key>' (Groq preferred if both are set), or None."""
+    def secret(name):
+        try:
+            return st.secrets.get(name, "") or ""
+        except Exception:
+            return ""
+    g, m = secret("GROQ_API_KEY").strip(), secret("GEMINI_API_KEY").strip()
+    return f"groq:{g}" if g else f"gemini:{m}" if m else None
+
+
+def _post(url, body, headers):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", "User-Agent": UA, **headers})
+    with urllib.request.urlopen(req, timeout=40) as r:
+        return json.loads(r.read())
 
 
 def _call(key, prompt, json_mode=False):
-    """Call Gemini. Returns (text, None) or (None, error message)."""
-    body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}}
-    if json_mode:
-        body["generationConfig"]["responseMimeType"] = "application/json"
+    """Call the configured provider. Returns (text, None) or (None, error message)."""
+    provider, _, k = key.partition(":")
     last = "unknown error"
-    for m in MODELS:
-        req = urllib.request.Request(API.format(m=m), data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json", "x-goog-api-key": key})
+    models = GROQ_MODELS if provider == "groq" else MODELS
+    for m in models:
         try:
-            with urllib.request.urlopen(req, timeout=40) as r:
-                data = json.loads(r.read())
+            if provider == "groq":
+                body = {"model": m, "temperature": 0.1, "messages": [{"role": "user", "content": prompt}]}
+                if json_mode:
+                    body["response_format"] = {"type": "json_object"}
+                data = _post(GROQ_API, body, {"Authorization": f"Bearer {k}"})
+                return data["choices"][0]["message"]["content"], None
+            body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}}
+            if json_mode:
+                body["generationConfig"]["responseMimeType"] = "application/json"
+            data = _post(API.format(m=m), body, {"x-goog-api-key": k})
             return data["candidates"][0]["content"]["parts"][0]["text"], None
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="ignore")[:300]
-            last = f"{m}: HTTP {e.code} {detail}"
-            if e.code in (404, 400) and "not found" in detail.lower():
+            last = f"{provider}/{m}: HTTP {e.code} {detail}"
+            if e.code in (404, 400) and ("not found" in detail.lower() or "decommissioned" in detail.lower()):
                 continue  # try the next model name
             return None, last
         except Exception as e:  # network, timeout, bad JSON
-            return None, f"{m}: {type(e).__name__}: {e}"
+            return None, f"{provider}/{m}: {type(e).__name__}: {e}"
     return None, last
 
 
